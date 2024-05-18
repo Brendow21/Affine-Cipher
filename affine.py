@@ -1,10 +1,12 @@
-import sys
 import typer
+from pydantic import BaseModel
 
 
 """
     Affine Cipher
-    Encrypts, Decrpyts, and Deciphers a text file utilizing typer for command line parsing
+    Encrypts, Decrpyts, and Deciphers a text file.
+    Uses typer for command line parsing.
+    Uses Pydantic to create Key Pair Objects.
     
     To run program
     In command line run:
@@ -18,35 +20,43 @@ import typer
 	    Ex input: python affine.py decipher input.txt output.txt dictionary.txt
 
     Author: Brendan Hom
-    Version: 5/15/24
+    Version: 5/16/24
 """
 
 app = typer.Typer()
 
 
+class KeyPair(BaseModel):
+    a: int
+    b: int
+
+
 # Eextended Euclidean Algoritm
-def egcd(a, b):
+def egcd(key: KeyPair):
     s, t, u, v = 1, 0, 0, 1
-    while b != 0:
-        q = a // b
-        a, b = b, a % b
+    while key.b != 0:
+        q = key.a // key.b
+        key.a, key.b = key.b, key.a % key.b
         s, t, u, v = u, v, s - u * q, t - v * q
-    d = a
+    d = key.a
     return d, s, t
 
 
 # Mod Inverse
-def modinv(a, m):
-    d, s, t = egcd(a, m)
-    return s % m
+def modinv(a: int, modulo=128):
+    key = KeyPair(a=a, b=modulo)
+    d, s, t = egcd(key)
+    return s % modulo
 
 
 # Check Valid
-def checkValid(a, b, m):
-    d, s, t = egcd(a, m)
+def checkValid(key: KeyPair, modulo=128):
+    key2 = KeyPair(a=key.a, b=modulo)
+    d, s, t = egcd(key2)
     if d != 1:
-        print(f"The key pair ({a}, {b}) is invalid, please select another key.")
-        sys.exit(1)
+        raise ValueError(
+            f"The key pair ({key.a}, {key.b}) is invalid, please select another key."
+        )
 
 
 # Open and read file
@@ -69,23 +79,23 @@ def load_dictionary(dictionary_file):
 
 
 # Loop
-def affine_transform(text, a, b, m, is_encrypt):
+def affine_loop(message, key: KeyPair, modulo, is_encrypt):
     if is_encrypt:
-        return bytes([(a * byte + b) % m for byte in text])
+        return bytes([(key.a * byte + key.b) % modulo for byte in message])
     else:
-        a_inv = modinv(a, m)
-        return bytes([(a_inv * (byte - b)) % m for byte in text])
+        a_inv = modinv(key.a)
+        return bytes([(a_inv * (byte - key.b)) % modulo for byte in message])
 
 
 # Encrypt
-def encrypt(message, a, b):
-    return affine_transform(message, a, b, 128, True)
+def encrypt(message, key: KeyPair):
+    return affine_loop(message, key, 128, True)
 
 
 # Decrpyt
-def decrypt(crypt, a, b):
-    a_inv = modinv(a, 128)
-    return affine_transform(crypt, a, b, 128, False)
+def decrypt(crypt, key: KeyPair):
+    a_inv = modinv(key.a)
+    return affine_loop(crypt, key, 128, False)
 
 
 # Decipher
@@ -114,20 +124,22 @@ def decipher(ciphertext, dictionary_set):
 # Encrypt
 @app.command()
 def encrypt1(input_file: str, output_file: str, a: int, b: int):
-    checkValid(a, b, 128)
+    key = KeyPair(a=a, b=b)
+    checkValid(key)
     plaintext = read_file(input_file)
     ciphertext = ""
-    ciphertext = encrypt(plaintext, a, b).decode("ascii")
+    ciphertext = encrypt(plaintext, key).decode("ascii")
     write_file(output_file, ciphertext)
 
 
 # Decrypt
 @app.command()
 def decrypt1(input_file: str, output_file: str, a: int, b: int):
-    checkValid(a, b, 128)
+    key = KeyPair(a=a, b=b)
+    checkValid(key)
     ciphertext = read_file(input_file)
     plaintext = ""
-    plaintext = decrypt(ciphertext, a, b).decode("ascii")
+    plaintext = decrypt(ciphertext, key).decode("ascii")
     write_file(output_file, plaintext)
 
 
